@@ -151,13 +151,27 @@ async function loadMessages() {
 }
 
 function setupRealtime() {
-    supabase
-    .channel('public:messages')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        renderMessage(payload.new);
-        scrollToBottom();
-    })
-    .subscribe();
+    // 1. Create a channel
+    const channel = supabase.channel('room1');
+
+    // 2. Listen for changes
+    channel.on(
+        'postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' }, 
+        (payload) => {
+            console.log('New message received!', payload); // Debug log
+            renderMessage(payload.new);
+            scrollToBottom();
+        }
+    )
+    .subscribe((status) => {
+        // 3. Log connection status
+        if (status === 'SUBSCRIBED') {
+            console.log('Connected to Realtime!');
+        } else {
+            console.log('Realtime status:', status);
+        }
+    });
 }
 
 function renderMessage(msg) {

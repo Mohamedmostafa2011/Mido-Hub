@@ -1,7 +1,7 @@
 // --- CONFIGURATION ---
 // PASTE YOUR SUPABASE DETAILS HERE
-const SUPABASE_URL = "https://YOUR-PROJECT-ID.supabase.co"; 
-const SUPABASE_KEY = "YOUR-ANON-KEY-HERE"; 
+const SUPABASE_URL = "https://oocwrzdfygieywntcsdv.supabase.co"; 
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vY3dyemRmeWdpZXl3bnRjc2R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNTkyMjIsImV4cCI6MjA3OTgzNTIyMn0.me2293EfGeWIRwoFijoyF-uHYtO8JH5_hR5RgEvIziY"; 
 
 // Initialize Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);

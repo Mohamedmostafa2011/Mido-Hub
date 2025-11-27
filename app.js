@@ -1,7 +1,7 @@
 // --- CONFIGURATION ---
 // PASTE YOUR SUPABASE DETAILS HERE
-const SUPABASE_URL = "https://oocwrzdfygieywntcsdv.supabase.co"; 
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vY3dyemRmeWdpZXl3bnRjc2R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNTkyMjIsImV4cCI6MjA3OTgzNTIyMn0.me2293EfGeWIRwoFijoyF-uHYtO8JH5_hR5RgEvIziY"; 
+const SUPABASE_URL = "https://YOUR-PROJECT-ID.supabase.co"; 
+const SUPABASE_KEY = "YOUR-ANON-KEY-HERE"; 
 
 // Initialize Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -21,11 +21,12 @@ const fileNameDisplay = document.getElementById('file-name-display');
 const removeFileBtn = document.getElementById('remove-file');
 const progressBar = document.getElementById('progress-bar');
 const progContainer = document.getElementById('progress-bar-container');
+const submitBtn = document.getElementById('submit-btn');
 
 let currentUser = localStorage.getItem('mido_user');
 let selectedFile = null;
 
-// 1. Auth Logic
+// --- 1. Auth Logic ---
 function checkAuth() {
     if (currentUser) {
         loginScreen.classList.remove('active');
@@ -52,60 +53,96 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     location.reload();
 });
 
-// 2. File UI Logic
+// --- 2. File Logic (Browse & Paste) ---
+
+function handleFileSelection(file) {
+    selectedFile = file;
+    filePreviewArea.style.display = 'flex';
+    
+    // If pasted, generate a name
+    if (!file.name || file.name === 'image.png') {
+        const ext = file.type.split('/')[1] || 'png';
+        file.name = `pasted_image.${ext}`; // Just a display name
+        // We add a timestamp later for uniqueness
+    }
+    
+    fileNameDisplay.innerText = file.name;
+    textInput.placeholder = "File attached. Hit send...";
+}
+
+// A. Browse Button
 fileInput.addEventListener('change', (e) => {
     if (e.target.files[0]) {
-        selectedFile = e.target.files[0];
-        filePreviewArea.style.display = 'flex';
-        fileNameDisplay.innerText = selectedFile.name;
+        handleFileSelection(e.target.files[0]);
     }
 });
 
+// B. Paste (Ctrl+V) Logic
+textInput.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+        if (item.kind === 'file') {
+            e.preventDefault();
+            const blob = item.getAsFile();
+            handleFileSelection(blob);
+        }
+    }
+});
+
+// C. Remove File Button
 removeFileBtn.addEventListener('click', () => {
+    clearFileSelection();
+});
+
+function clearFileSelection() {
     selectedFile = null;
     fileInput.value = '';
     filePreviewArea.style.display = 'none';
-});
+    textInput.placeholder = "Type message or paste image...";
+    progContainer.style.display = 'none'; // Hide loading bar
+    progressBar.style.width = '0%';
+}
 
-// 3. Send Logic
+// --- 3. Send Logic ---
 msgForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();
 
     if (!text && !selectedFile) return;
 
-    const submitBtn = document.getElementById('submit-btn');
     submitBtn.disabled = true;
     
     let finalFileUrl = null;
     let finalFileName = null;
 
     try {
-        // Upload File if exists
+        // A. Upload File (If exists)
         if (selectedFile) {
             progContainer.style.display = 'block';
-            progressBar.style.width = '30%';
+            progressBar.style.width = '30%'; // Started
 
-            const fileName = `${Date.now()}_${selectedFile.name.replace(/\s/g, '_')}`;
+            // Create unique name: timestamp_cleanName
+            const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_');
+            const storagePath = `${Date.now()}_${safeName}`;
             
             const { data, error } = await supabase.storage
                 .from('mido-files')
-                .upload(fileName, selectedFile);
+                .upload(storagePath, selectedFile);
 
             if (error) throw error;
 
-            progressBar.style.width = '80%';
+            progressBar.style.width = '80%'; // Uploaded
             
-            // Get Public URL
+            // Get URL
             const { data: publicUrlData } = supabase.storage
                 .from('mido-files')
-                .getPublicUrl(fileName);
+                .getPublicUrl(storagePath);
                 
             finalFileUrl = publicUrlData.publicUrl;
             finalFileName = selectedFile.name;
         }
 
-        // Insert into Database
+        // B. Database Insert
         const { error: dbError } = await supabase
             .from('messages')
             .insert([{
@@ -117,26 +154,48 @@ msgForm.addEventListener('submit', async (e) => {
 
         if (dbError) throw dbError;
 
-        // Reset UI
+        // C. Success Cleanup
         progressBar.style.width = '100%';
         setTimeout(() => {
             textInput.value = '';
-            fileInput.value = '';
-            selectedFile = null;
-            filePreviewArea.style.display = 'none';
-            progContainer.style.display = 'none';
-            progressBar.style.width = '0%';
+            clearFileSelection();
             submitBtn.disabled = false;
         }, 500);
 
     } catch (err) {
         console.error(err);
-        alert('Error sending: ' + err.message);
+        alert('Error: ' + err.message);
+        // IMPORTANT: Reset UI on error so it doesn't get stuck
         submitBtn.disabled = false;
+        progressBar.style.background = 'red';
+        setTimeout(() => {
+             progressBar.style.width = '0%';
+             progressBar.style.background = '#03dac6'; // reset color
+             progContainer.style.display = 'none';
+        }, 2000);
     }
 });
 
-// 4. Load & Realtime Logic
+// --- 4. Realtime & Delete Logic ---
+
+function setupRealtime() {
+    const channel = supabase.channel('room1');
+    channel.on(
+        'postgres_changes', 
+        { event: '*', schema: 'public', table: 'messages' }, 
+        (payload) => {
+            if (payload.eventType === 'INSERT') {
+                renderMessage(payload.new);
+                scrollToBottom();
+            }
+            if (payload.eventType === 'DELETE') {
+                const msgDiv = document.getElementById(`msg-${payload.old.id}`);
+                if (msgDiv) msgDiv.remove();
+            }
+        }
+    ).subscribe();
+}
+
 async function loadMessages() {
     const { data, error } = await supabase
         .from('messages')
@@ -150,52 +209,39 @@ async function loadMessages() {
     }
 }
 
-function setupRealtime() {
-    // 1. Create a channel
-    const channel = supabase.channel('room1');
-
-    // 2. Listen for changes
-    channel.on(
-        'postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'messages' }, 
-        (payload) => {
-            console.log('New message received!', payload); // Debug log
-            renderMessage(payload.new);
-            scrollToBottom();
-        }
-    )
-    .subscribe((status) => {
-        // 3. Log connection status
-        if (status === 'SUBSCRIBED') {
-            console.log('Connected to Realtime!');
-        } else {
-            console.log('Realtime status:', status);
-        }
-    });
-}
+// Delete Function attached to window
+window.deleteMessage = async (id) => {
+    if(confirm('Delete this message?')) {
+        await supabase.from('messages').delete().eq('id', id);
+    }
+};
 
 function renderMessage(msg) {
     const isMe = msg.username === currentUser;
     const div = document.createElement('div');
     div.className = `msg-wrapper ${isMe ? 'my-msg' : 'other-msg'}`;
+    div.id = `msg-${msg.id}`;
 
     let content = '';
     
-    // Text
     if (msg.text_content) content += `<p>${msg.text_content}</p>`;
     
-    // File
     if (msg.file_url) {
-        const isImg = msg.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+        const isImg = msg.file_url.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i);
         if (isImg) {
             content += `<a href="${msg.file_url}" target="_blank"><img src="${msg.file_url}" class="img-preview"></a>`;
         } else {
-            content += `<a href="${msg.file_url}" target="_blank" class="file-link"><i class="fas fa-download"></i> ${msg.file_name}</a>`;
+            content += `<a href="${msg.file_url}" target="_blank" class="file-link"><i class="fas fa-download"></i> ${msg.file_name || 'File'}</a>`;
         }
     }
 
+    let deleteBtn = '';
+    if (isMe) {
+        deleteBtn = `<span class="delete-icon" onclick="deleteMessage(${msg.id})"><i class="fas fa-trash"></i></span>`;
+    }
+
     div.innerHTML = `
-        <div class="sender-name">${isMe ? 'You' : msg.username}</div>
+        <div class="sender-name">${isMe ? 'You' : msg.username} ${deleteBtn}</div>
         <div class="msg-bubble">${content}</div>
     `;
     
@@ -206,5 +252,5 @@ function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Start
+// Run
 checkAuth();

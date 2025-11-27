@@ -97,8 +97,18 @@ window.copyToClipboard = (textId, btn) => {
 };
 
 // C. Lightbox Logic (Open Full Screen)
-window.openLightbox = (url, type) => {
+// --- C. Lightbox Logic (Updated) ---
+// 1. Global variables to remember what is currently open
+let currentLightboxUrl = '';
+let currentLightboxName = '';
+
+window.openLightbox = (url, type, fileName) => {
     lightbox.classList.add('active');
+    
+    // 2. Save current file info
+    currentLightboxUrl = url;
+    currentLightboxName = fileName || 'downloaded_file';
+
     if (type === 'image') {
         lightboxImg.style.display = 'block';
         lightboxVideo.style.display = 'none';
@@ -111,13 +121,19 @@ window.openLightbox = (url, type) => {
     }
 };
 
+// 3. Listen for the NEW big download button click
+document.getElementById('lightbox-dl-btn').addEventListener('click', (e) => {
+    e.stopPropagation(); // Don't close the lightbox
+    // Trigger the smart download function
+    window.forceDownload(currentLightboxUrl, currentLightboxName);
+});
+
 window.closeLightbox = () => {
     lightbox.classList.remove('active');
     lightboxImg.src = '';
     lightboxVideo.pause();
     lightboxVideo.src = '';
 };
-
 // --- 3. File Logic ---
 function handleFileSelection(file) {
     selectedFile = file;
@@ -236,7 +252,7 @@ function renderMessage(msg) {
 
     let content = '';
     
-    // 1. Text
+    // Text
     if (msg.text_content) {
         const textId = `text-${msg.id}`;
         content += `
@@ -245,6 +261,52 @@ function renderMessage(msg) {
                 <button class="copy-btn" onclick="copyToClipboard('${textId}', this)"><i class="far fa-copy"></i></button>
             </div>`;
     }
+    
+    // File
+    if (msg.file_url) {
+        const name = msg.file_name || 'File';
+        const ext = name.split('.').pop().toLowerCase();
+        
+        // Small download button for the chat bubble view
+        const dlButton = `<button class="dl-btn" onclick="event.stopPropagation(); forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-download"></i></button>`;
+
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            // UPDATED: We pass '${name}' as the 3rd argument here
+            content += `
+                <div class="media-container" onclick="openLightbox('${msg.file_url}', 'image', '${name}')">
+                    <img src="${msg.file_url}" class="img-preview">
+                    ${dlButton}
+                </div>`;
+        } else if (['mp4', 'webm', 'ogg'].includes(ext)) {
+            // UPDATED: We pass '${name}' as the 3rd argument here
+            content += `
+                <div class="media-container" onclick="openLightbox('${msg.file_url}', 'video', '${name}')">
+                    <video class="video-preview"><source src="${msg.file_url}"></video>
+                    ${dlButton}
+                </div>`;
+        } else {
+            // Other files
+            content += `
+                <div class="file-card" onclick="window.open('${msg.file_url}', '_blank')">
+                    <div class="file-icon"><i class="fas fa-file"></i></div>
+                    <div class="file-info">
+                        <span class="file-name">${name}</span>
+                        <span class="click-hint">Click to Open</span>
+                    </div>
+                    <div class="download-icon" onclick="event.stopPropagation(); forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-arrow-down"></i></div>
+                </div>`;
+        }
+    }
+
+    let deleteBtn = isMe ? `<span class="delete-icon" onclick="deleteMessage(${msg.id})"><i class="fas fa-trash"></i></span>` : '';
+
+    div.innerHTML = `
+        <div class="sender-name">${isMe ? 'You' : msg.username} ${deleteBtn}</div>
+        <div class="msg-bubble">${content}</div>
+    `;
+    
+    chatContainer.appendChild(div);
+}
     
     // 2. File
     if (msg.file_url) {

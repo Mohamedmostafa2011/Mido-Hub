@@ -1,24 +1,12 @@
-// Import Firebase functions
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js";
+// --- CONFIGURATION ---
+// PASTE YOUR SUPABASE DETAILS HERE
+const SUPABASE_URL = "https://oocwrzdfygieywntcsdv.supabase.co"; 
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vY3dyemRmeWdpZXl3bnRjc2R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNTkyMjIsImV4cCI6MjA3OTgzNTIyMn0.me2293EfGeWIRwoFijoyF-uHYtO8JH5_hR5RgEvIziY"; 
 
-// --- PASTE YOUR FIREBASE CONFIG HERE ---
-const firebaseConfig = {
-  apiKey: "AIzaSyCrY2EVicQTifAf4HbATljI9c9Ra4wcH9c",
-  authDomain: "mido-hub.firebaseapp.com",
-  projectId: "mido-hub",
-  storageBucket: "mido-hub.firebasestorage.app",
-  messagingSenderId: "539001172832",
-  appId: "1:539001172832:web:007add458c8bc1ab6f6405"
-};
+// Initialize Supabase
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-// DOM Elements
+// Elements
 const loginScreen = document.getElementById('login-screen');
 const hubScreen = document.getElementById('hub-screen');
 const usernameInput = document.getElementById('username-input');
@@ -33,26 +21,21 @@ const fileNameDisplay = document.getElementById('file-name-display');
 const removeFileBtn = document.getElementById('remove-file');
 const progressBar = document.getElementById('progress-bar');
 const progContainer = document.getElementById('progress-bar-container');
-const logoutBtn = document.getElementById('logout-btn');
 
 let currentUser = localStorage.getItem('mido_user');
 let selectedFile = null;
 
-// --- 1. Authentication Logic ---
+// 1. Auth Logic
 function checkAuth() {
     if (currentUser) {
-        showHub();
+        loginScreen.classList.remove('active');
+        hubScreen.classList.add('active');
+        displayName.innerText = currentUser;
+        loadMessages();
+        setupRealtime();
     } else {
         loginScreen.classList.add('active');
-        hubScreen.classList.remove('active');
     }
-}
-
-function showHub() {
-    loginScreen.classList.remove('active');
-    hubScreen.classList.add('active');
-    displayName.innerText = currentUser;
-    loadMessages();
 }
 
 loginBtn.addEventListener('click', () => {
@@ -61,23 +44,20 @@ loginBtn.addEventListener('click', () => {
         currentUser = name;
         localStorage.setItem('mido_user', currentUser);
         checkAuth();
-    } else {
-        alert("Please enter a username");
     }
 });
 
-logoutBtn.addEventListener('click', () => {
+document.getElementById('logout-btn').addEventListener('click', () => {
     localStorage.removeItem('mido_user');
     location.reload();
 });
 
-// --- 2. File Handling Logic ---
+// 2. File UI Logic
 fileInput.addEventListener('change', (e) => {
     if (e.target.files[0]) {
         selectedFile = e.target.files[0];
         filePreviewArea.style.display = 'flex';
         fileNameDisplay.innerText = selectedFile.name;
-        textInput.placeholder = "Add a caption (optional)...";
     }
 });
 
@@ -85,126 +65,132 @@ removeFileBtn.addEventListener('click', () => {
     selectedFile = null;
     fileInput.value = '';
     filePreviewArea.style.display = 'none';
-    textInput.placeholder = "Type text or upload file...";
 });
 
-// --- 3. Sending Logic (Text OR File OR Both) ---
+// 3. Send Logic
 msgForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();
 
-    if (!text && !selectedFile) return; // Don't send empty
+    if (!text && !selectedFile) return;
 
-    // Disable button while sending
-    document.getElementById('submit-btn').disabled = true;
-
-    let fileUrl = null;
-    let fileName = null;
-    let fileType = null;
+    const submitBtn = document.getElementById('submit-btn');
+    submitBtn.disabled = true;
+    
+    let finalFileUrl = null;
+    let finalFileName = null;
 
     try {
-        // A. Handle File Upload if exists
+        // Upload File if exists
         if (selectedFile) {
             progContainer.style.display = 'block';
-            const storageRef = ref(storage, 'uploads/' + Date.now() + '_' + selectedFile.name);
-            const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+            progressBar.style.width = '30%';
 
-            // Wait for upload
-            await new Promise((resolve, reject) => {
-                uploadTask.on('state_changed', 
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        progressBar.style.width = progress + '%';
-                    }, 
-                    (error) => reject(error), 
-                    () => resolve()
-                );
-            });
+            const fileName = `${Date.now()}_${selectedFile.name.replace(/\s/g, '_')}`;
+            
+            const { data, error } = await supabase.storage
+                .from('mido-files')
+                .upload(fileName, selectedFile);
 
-            fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            fileName = selectedFile.name;
-            fileType = selectedFile.type;
+            if (error) throw error;
+
+            progressBar.style.width = '80%';
+            
+            // Get Public URL
+            const { data: publicUrlData } = supabase.storage
+                .from('mido-files')
+                .getPublicUrl(fileName);
+                
+            finalFileUrl = publicUrlData.publicUrl;
+            finalFileName = selectedFile.name;
         }
 
-        // B. Add to Database
-        await addDoc(collection(db, "messages"), {
-            user: currentUser,
-            text: text,
-            fileUrl: fileUrl,
-            fileName: fileName,
-            fileType: fileType,
-            timestamp: serverTimestamp()
-        });
+        // Insert into Database
+        const { error: dbError } = await supabase
+            .from('messages')
+            .insert([{
+                username: currentUser,
+                text_content: text,
+                file_url: finalFileUrl,
+                file_name: finalFileName
+            }]);
 
-        // Reset Form
-        textInput.value = '';
-        fileInput.value = '';
-        selectedFile = null;
-        filePreviewArea.style.display = 'none';
-        progContainer.style.display = 'none';
-        progressBar.style.width = '0%';
-        document.getElementById('submit-btn').disabled = false;
+        if (dbError) throw dbError;
+
+        // Reset UI
+        progressBar.style.width = '100%';
+        setTimeout(() => {
+            textInput.value = '';
+            fileInput.value = '';
+            selectedFile = null;
+            filePreviewArea.style.display = 'none';
+            progContainer.style.display = 'none';
+            progressBar.style.width = '0%';
+            submitBtn.disabled = false;
+        }, 500);
 
     } catch (err) {
-        console.error("Error sending message: ", err);
-        alert("Error sending message. Check console.");
-        document.getElementById('submit-btn').disabled = false;
+        console.error(err);
+        alert('Error sending: ' + err.message);
+        submitBtn.disabled = false;
     }
 });
 
-// --- 4. Real-time Listener ---
-function loadMessages() {
-    chatContainer.innerHTML = ''; // Clear loader
-    
-    const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
-    
-    onSnapshot(q, (snapshot) => {
-        chatContainer.innerHTML = ''; // Re-render prevents duplicates efficiently for simple apps
-        snapshot.forEach((doc) => {
-            renderMessage(doc.data());
-        });
-        // Auto scroll to bottom
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    });
+// 4. Load & Realtime Logic
+async function loadMessages() {
+    const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+    if (!error) {
+        chatContainer.innerHTML = '';
+        data.forEach(renderMessage);
+        scrollToBottom();
+    }
+}
+
+function setupRealtime() {
+    supabase
+    .channel('public:messages')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        renderMessage(payload.new);
+        scrollToBottom();
+    })
+    .subscribe();
 }
 
 function renderMessage(msg) {
-    if(!msg.timestamp) return; // Skip pending writes locally for smoother exp
-
-    const isMe = msg.user === currentUser;
+    const isMe = msg.username === currentUser;
     const div = document.createElement('div');
     div.className = `msg-wrapper ${isMe ? 'my-msg' : 'other-msg'}`;
 
     let content = '';
-
-    // 1. Add Text
-    if (msg.text) {
-        content += `<p>${msg.text}</p>`;
-    }
-
-    // 2. Add File
-    if (msg.fileUrl) {
-        if (msg.fileType && msg.fileType.startsWith('image/')) {
-            // Image
-            content += `<a href="${msg.fileUrl}" target="_blank"><img src="${msg.fileUrl}" class="img-preview" alt="image"></a>`;
+    
+    // Text
+    if (msg.text_content) content += `<p>${msg.text_content}</p>`;
+    
+    // File
+    if (msg.file_url) {
+        const isImg = msg.file_url.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+        if (isImg) {
+            content += `<a href="${msg.file_url}" target="_blank"><img src="${msg.file_url}" class="img-preview"></a>`;
         } else {
-            // Other file
-            content += `
-                <a href="${msg.fileUrl}" target="_blank" class="file-link">
-                    <i class="fas fa-download"></i> ${msg.fileName}
-                </a>`;
+            content += `<a href="${msg.file_url}" target="_blank" class="file-link"><i class="fas fa-download"></i> ${msg.file_name}</a>`;
         }
     }
 
     div.innerHTML = `
-        <div class="sender-name">${isMe ? 'You' : msg.user}</div>
-        <div class="msg-bubble">
-            ${content}
-        </div>
+        <div class="sender-name">${isMe ? 'You' : msg.username}</div>
+        <div class="msg-bubble">${content}</div>
     `;
-
+    
     chatContainer.appendChild(div);
 }
 
-// Run on Load
+function scrollToBottom() {
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Start
 checkAuth();

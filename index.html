@@ -56,14 +56,30 @@
         <!-- ... rest of your html ... -->
 
     <!-- LIGHTBOX (Full Screen Viewer) -->
+    <!-- LIGHTBOX (Full Screen Viewer) -->
     <div id="lightbox" class="lightbox" onclick="closeLightbox()">
-        <span class="close-btn">&times;</span>
+        
+        <!-- Top Right Buttons -->
+        <div class="lightbox-header">
+            <!-- Download Button inside Fullscreen -->
+            <span class="lightbox-icon" id="lightbox-dl-btn" title="Download">
+                <i class="fas fa-download"></i>
+            </span>
+            <!-- Close Button -->
+            <span class="lightbox-icon close-btn" onclick="closeLightbox()">
+                &times;
+            </span>
+        </div>
+
         <div class="lightbox-content" onclick="event.stopPropagation()">
             <img id="lightbox-img" src="">
             <video id="lightbox-video" controls></video>
         </div>
     </div>
 
+    <script src="app.js"></script>
+</body>
+</html>
     <script src="app.js"></script>
 </body>
 </html>

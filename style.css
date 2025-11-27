@@ -136,3 +136,100 @@ button:hover { opacity: 0.9; transform: translateY(-2px); }
     opacity: 1; 
     transform: scale(1.2); 
 }
+/* Download Button Style */
+.dl-btn {
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 35px;
+    height: 35px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    
+    /* Position it floating on the image/video */
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    transition: 0.2s;
+}
+
+.dl-btn:hover {
+    background: white;
+    color: black;
+    transform: scale(1.1);
+}
+
+.media-container {
+    position: relative; /* Needed for absolute positioning of dl-btn */
+    display: inline-block;
+    max-width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+/* Ensure images don't get too big */
+.img-preview, .video-preview {
+    max-width: 100%;
+    max-height: 300px;
+    display: block;
+    border-radius: 10px;
+}
+
+/* File Card (Already given before, but just in case) */
+.file-card {
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 5px;
+    gap: 10px;
+    transition: background 0.2s;
+}
+.file-card:hover { background: rgba(255,255,255,0.1); }
+.file-name { font-weight: bold; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.click-hint { font-size: 0.7rem; opacity: 0.7; display: block; }
+/* --- Text Copy Button Style --- */
+.text-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Space between text and button */
+}
+
+.text-group p {
+    margin: 0;
+    word-break: break-word;
+}
+
+.copy-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 5px;
+    border-radius: 5px;
+    transition: all 0.2s ease;
+    width: auto; /* Reset specific width */
+    display: flex; /* Ensure icon centers */
+}
+
+.copy-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+}
+
+/* Adjust bubbles to fit the button */
+.msg-bubble {
+    padding: 12px 16px;
+    min-width: 100px; /* Ensure small messages have space for the button */
+}

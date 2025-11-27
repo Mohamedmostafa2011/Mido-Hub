@@ -1,9 +1,7 @@
 // --- CONFIGURATION ---
-// PASTE YOUR SUPABASE DETAILS HERE
-const SUPABASE_URL = "https://oocwrzdfygieywntcsdv.supabase.co"; 
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vY3dyemRmeWdpZXl3bnRjc2R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyNTkyMjIsImV4cCI6MjA3OTgzNTIyMn0.me2293EfGeWIRwoFijoyF-uHYtO8JH5_hR5RgEvIziY"; 
+const SUPABASE_URL = "https://YOUR-PROJECT-URL.supabase.co"; 
+const SUPABASE_KEY = "YOUR-ANON-KEY"; 
 
-// Initialize Supabase
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Elements
@@ -53,167 +51,155 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     location.reload();
 });
 
-// --- 2. File Logic (Browse & Paste) ---
+// --- 2. NEW: Utilities (Download & Copy) ---
 
+// Force Download
+window.forceDownload = async (url, filename) => {
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(link);
+    } catch (err) {
+        window.open(url, '_blank');
+    }
+};
+
+// Copy Text
+window.copyToClipboard = (textId, btn) => {
+    const textElement = document.getElementById(textId);
+    if (!textElement) return;
+
+    const textToCopy = textElement.innerText;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        // Visual Feedback: Change Icon to Checkmark
+        const originalIcon = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        btn.style.color = '#00ff00'; // Green
+        
+        setTimeout(() => {
+            btn.innerHTML = '<i class="far fa-copy"></i>'; // Back to copy icon
+            btn.style.color = ''; // Reset color
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy', err);
+    });
+};
+
+// --- 3. File Logic ---
 function handleFileSelection(file) {
     selectedFile = file;
     filePreviewArea.style.display = 'flex';
-    
-    // If pasted, generate a name
-    if (!file.name || file.name === 'image.png') {
+    if (!file.name) {
         const ext = file.type.split('/')[1] || 'png';
-        file.name = `pasted_image.${ext}`; // Just a display name
-        // We add a timestamp later for uniqueness
+        file.name = `pasted_${Date.now()}.${ext}`;
     }
-    
     fileNameDisplay.innerText = file.name;
-    textInput.placeholder = "File attached. Hit send...";
+    textInput.placeholder = "File attached...";
 }
 
-// A. Browse Button
 fileInput.addEventListener('change', (e) => {
-    if (e.target.files[0]) {
-        handleFileSelection(e.target.files[0]);
-    }
+    if (e.target.files[0]) handleFileSelection(e.target.files[0]);
 });
 
-// B. Paste (Ctrl+V) Logic
 textInput.addEventListener('paste', (e) => {
     const items = (e.clipboardData || e.originalEvent.clipboardData).items;
     for (const item of items) {
         if (item.kind === 'file') {
             e.preventDefault();
-            const blob = item.getAsFile();
-            handleFileSelection(blob);
+            handleFileSelection(item.getAsFile());
         }
     }
 });
 
-// C. Remove File Button
 removeFileBtn.addEventListener('click', () => {
-    clearFileSelection();
-});
-
-function clearFileSelection() {
     selectedFile = null;
     fileInput.value = '';
     filePreviewArea.style.display = 'none';
-    textInput.placeholder = "Type message or paste image...";
-    progContainer.style.display = 'none'; // Hide loading bar
-    progressBar.style.width = '0%';
-}
+    textInput.placeholder = "Type message...";
+    progContainer.style.display = 'none';
+});
 
-// --- 3. Send Logic ---
+// --- 4. Send Logic ---
 msgForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = textInput.value.trim();
-
     if (!text && !selectedFile) return;
 
     submitBtn.disabled = true;
-    
     let finalFileUrl = null;
     let finalFileName = null;
 
     try {
-        // A. Upload File (If exists)
         if (selectedFile) {
             progContainer.style.display = 'block';
-            progressBar.style.width = '30%'; // Started
-
-            // Create unique name: timestamp_cleanName
+            progressBar.style.width = '30%';
+            
             const safeName = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, '_');
             const storagePath = `${Date.now()}_${safeName}`;
             
-            const { data, error } = await supabase.storage
-                .from('mido-files')
-                .upload(storagePath, selectedFile);
-
+            const { error } = await supabase.storage.from('mido-files').upload(storagePath, selectedFile);
             if (error) throw error;
 
-            progressBar.style.width = '80%'; // Uploaded
-            
-            // Get URL
-            const { data: publicUrlData } = supabase.storage
-                .from('mido-files')
-                .getPublicUrl(storagePath);
-                
-            finalFileUrl = publicUrlData.publicUrl;
+            progressBar.style.width = '80%';
+            const { data } = supabase.storage.from('mido-files').getPublicUrl(storagePath);
+            finalFileUrl = data.publicUrl;
             finalFileName = selectedFile.name;
         }
 
-        // B. Database Insert
-        const { error: dbError } = await supabase
-            .from('messages')
-            .insert([{
-                username: currentUser,
-                text_content: text,
-                file_url: finalFileUrl,
-                file_name: finalFileName
-            }]);
+        const { error } = await supabase.from('messages').insert([{
+            username: currentUser,
+            text_content: text,
+            file_url: finalFileUrl,
+            file_name: finalFileName
+        }]);
 
-        if (dbError) throw dbError;
+        if (error) throw error;
 
-        // C. Success Cleanup
         progressBar.style.width = '100%';
         setTimeout(() => {
             textInput.value = '';
-            clearFileSelection();
+            selectedFile = null;
+            filePreviewArea.style.display = 'none';
+            fileInput.value = '';
+            progContainer.style.display = 'none';
+            progressBar.style.width = '0%';
             submitBtn.disabled = false;
         }, 500);
 
     } catch (err) {
-        console.error(err);
-        alert('Error: ' + err.message);
-        // IMPORTANT: Reset UI on error so it doesn't get stuck
+        alert(err.message);
         submitBtn.disabled = false;
-        progressBar.style.background = 'red';
-        setTimeout(() => {
-             progressBar.style.width = '0%';
-             progressBar.style.background = '#03dac6'; // reset color
-             progContainer.style.display = 'none';
-        }, 2000);
     }
 });
 
-// --- 4. Realtime & Delete Logic ---
-
+// --- 5. Realtime & Render ---
 function setupRealtime() {
     const channel = supabase.channel('room1');
-    channel.on(
-        'postgres_changes', 
-        { event: '*', schema: 'public', table: 'messages' }, 
-        (payload) => {
-            if (payload.eventType === 'INSERT') {
-                renderMessage(payload.new);
-                scrollToBottom();
-            }
-            if (payload.eventType === 'DELETE') {
-                const msgDiv = document.getElementById(`msg-${payload.old.id}`);
-                if (msgDiv) msgDiv.remove();
-            }
-        }
-    ).subscribe();
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        if (payload.eventType === 'INSERT') { renderMessage(payload.new); scrollToBottom(); }
+        if (payload.eventType === 'DELETE') { const el = document.getElementById(`msg-${payload.old.id}`); if(el) el.remove(); }
+    }).subscribe();
 }
 
 async function loadMessages() {
-    const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-    if (!error) {
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    if (data) {
         chatContainer.innerHTML = '';
         data.forEach(renderMessage);
         scrollToBottom();
     }
 }
 
-// Delete Function attached to window
 window.deleteMessage = async (id) => {
-    if(confirm('Delete this message?')) {
-        await supabase.from('messages').delete().eq('id', id);
-    }
+    if(confirm('Delete?')) await supabase.from('messages').delete().eq('id', id);
 };
 
 function renderMessage(msg) {
@@ -224,21 +210,38 @@ function renderMessage(msg) {
 
     let content = '';
     
-    if (msg.text_content) content += `<p>${msg.text_content}</p>`;
+    // 1. Text with Copy Button
+    if (msg.text_content) {
+        const textId = `text-${msg.id}`;
+        content += `
+            <div class="text-group">
+                <p id="${textId}">${msg.text_content}</p>
+                <button class="copy-btn" onclick="copyToClipboard('${textId}', this)" title="Copy Text">
+                    <i class="far fa-copy"></i>
+                </button>
+            </div>`;
+    }
     
+    // 2. File
     if (msg.file_url) {
-        const isImg = msg.file_url.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i);
-        if (isImg) {
-            content += `<a href="${msg.file_url}" target="_blank"><img src="${msg.file_url}" class="img-preview"></a>`;
+        const name = msg.file_name || 'File';
+        const ext = name.split('.').pop().toLowerCase();
+        const dlButton = `<button class="dl-btn" onclick="forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-download"></i></button>`;
+
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            content += `<div class="media-container"><img src="${msg.file_url}" class="img-preview">${dlButton}</div>`;
+        } else if (['mp4', 'webm', 'ogg'].includes(ext)) {
+            content += `<div class="media-container"><video controls class="video-preview"><source src="${msg.file_url}"></video>${dlButton}</div>`;
         } else {
-            content += `<a href="${msg.file_url}" target="_blank" class="file-link"><i class="fas fa-download"></i> ${msg.file_name || 'File'}</a>`;
+            content += `<div class="file-card" onclick="forceDownload('${msg.file_url}', '${name}')">
+                <div class="file-icon"><i class="fas fa-file"></i></div>
+                <div class="file-info"><span class="file-name">${name}</span><span class="click-hint">Click to Download</span></div>
+                <div class="download-icon"><i class="fas fa-arrow-down"></i></div>
+            </div>`;
         }
     }
 
-    let deleteBtn = '';
-    if (isMe) {
-        deleteBtn = `<span class="delete-icon" onclick="deleteMessage(${msg.id})"><i class="fas fa-trash"></i></span>`;
-    }
+    let deleteBtn = isMe ? `<span class="delete-icon" onclick="deleteMessage(${msg.id})"><i class="fas fa-trash"></i></span>` : '';
 
     div.innerHTML = `
         <div class="sender-name">${isMe ? 'You' : msg.username} ${deleteBtn}</div>
@@ -252,5 +255,4 @@ function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Run
 checkAuth();

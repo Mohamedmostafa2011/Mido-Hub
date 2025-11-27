@@ -53,6 +53,21 @@
         </div>
     </div>
 
+        <!-- ... rest of your html ... -->
+
+    <!-- LIGHTBOX (Full Screen Viewer) -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+        <span class="close-btn">&times;</span>
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <img id="lightbox-img" src="">
+            <video id="lightbox-video" controls></video>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+    
     <script src="app.js"></script>
 </body>
 </html>

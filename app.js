@@ -5,12 +5,12 @@ import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://w
 
 // --- PASTE YOUR FIREBASE CONFIG HERE ---
 const firebaseConfig = {
-    apiKey: "AIzaSyDxxxxxx...",
-    authDomain: "mido-hub.firebaseapp.com",
-    projectId: "mido-hub",
-    storageBucket: "mido-hub.appspot.com",
-    messagingSenderId: "12345...",
-    appId: "1:12345..."
+  apiKey: "AIzaSyCrY2EVicQTifAf4HbATljI9c9Ra4wcH9c",
+  authDomain: "mido-hub.firebaseapp.com",
+  projectId: "mido-hub",
+  storageBucket: "mido-hub.firebasestorage.app",
+  messagingSenderId: "539001172832",
+  appId: "1:539001172832:web:007add458c8bc1ab6f6405"
 };
 
 // Initialize Firebase

@@ -21,6 +21,11 @@ const progressBar = document.getElementById('progress-bar');
 const progContainer = document.getElementById('progress-bar-container');
 const submitBtn = document.getElementById('submit-btn');
 
+// Lightbox Elements
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+const lightboxVideo = document.getElementById('lightbox-video');
+
 let currentUser = localStorage.getItem('mido_user');
 let selectedFile = null;
 
@@ -51,10 +56,16 @@ document.getElementById('logout-btn').addEventListener('click', () => {
     location.reload();
 });
 
-// --- 2. NEW: Utilities (Download & Copy) ---
+// --- 2. UTILS: Download, Copy, and Lightbox ---
 
-// Force Download
+// A. Force Download (Smart Mobile/PC check)
 window.forceDownload = async (url, filename) => {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        const downloadUrl = url + '?t=' + Date.now(); 
+        window.open(downloadUrl, '_blank');
+        return;
+    }
     try {
         const response = await fetch(url);
         const blob = await response.blob();
@@ -71,26 +82,40 @@ window.forceDownload = async (url, filename) => {
     }
 };
 
-// Copy Text
+// B. Copy Text
 window.copyToClipboard = (textId, btn) => {
     const textElement = document.getElementById(textId);
     if (!textElement) return;
-
-    const textToCopy = textElement.innerText;
-
-    navigator.clipboard.writeText(textToCopy).then(() => {
-        // Visual Feedback: Change Icon to Checkmark
-        const originalIcon = btn.innerHTML;
+    navigator.clipboard.writeText(textElement.innerText).then(() => {
         btn.innerHTML = '<i class="fas fa-check"></i>';
-        btn.style.color = '#00ff00'; // Green
-        
+        btn.style.color = '#00ff00';
         setTimeout(() => {
-            btn.innerHTML = '<i class="far fa-copy"></i>'; // Back to copy icon
-            btn.style.color = ''; // Reset color
+            btn.innerHTML = '<i class="far fa-copy"></i>';
+            btn.style.color = '';
         }, 2000);
-    }).catch(err => {
-        console.error('Failed to copy', err);
     });
+};
+
+// C. Lightbox Logic (Open Full Screen)
+window.openLightbox = (url, type) => {
+    lightbox.classList.add('active');
+    if (type === 'image') {
+        lightboxImg.style.display = 'block';
+        lightboxVideo.style.display = 'none';
+        lightboxImg.src = url;
+    } else if (type === 'video') {
+        lightboxImg.style.display = 'none';
+        lightboxVideo.style.display = 'block';
+        lightboxVideo.src = url;
+        lightboxVideo.play();
+    }
+};
+
+window.closeLightbox = () => {
+    lightbox.classList.remove('active');
+    lightboxImg.src = '';
+    lightboxVideo.pause();
+    lightboxVideo.src = '';
 };
 
 // --- 3. File Logic ---
@@ -202,6 +227,7 @@ window.deleteMessage = async (id) => {
     if(confirm('Delete?')) await supabase.from('messages').delete().eq('id', id);
 };
 
+// --- RENDER LOGIC ---
 function renderMessage(msg) {
     const isMe = msg.username === currentUser;
     const div = document.createElement('div');
@@ -210,15 +236,13 @@ function renderMessage(msg) {
 
     let content = '';
     
-    // 1. Text with Copy Button
+    // 1. Text
     if (msg.text_content) {
         const textId = `text-${msg.id}`;
         content += `
             <div class="text-group">
                 <p id="${textId}">${msg.text_content}</p>
-                <button class="copy-btn" onclick="copyToClipboard('${textId}', this)" title="Copy Text">
-                    <i class="far fa-copy"></i>
-                </button>
+                <button class="copy-btn" onclick="copyToClipboard('${textId}', this)"><i class="far fa-copy"></i></button>
             </div>`;
     }
     
@@ -226,18 +250,30 @@ function renderMessage(msg) {
     if (msg.file_url) {
         const name = msg.file_name || 'File';
         const ext = name.split('.').pop().toLowerCase();
-        const dlButton = `<button class="dl-btn" onclick="forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-download"></i></button>`;
+        const dlButton = `<button class="dl-btn" onclick="event.stopPropagation(); forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-download"></i></button>`;
 
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-            content += `<div class="media-container"><img src="${msg.file_url}" class="img-preview">${dlButton}</div>`;
+            // Image: Added onclick to openLightbox
+            content += `
+                <div class="media-container" onclick="openLightbox('${msg.file_url}', 'image')">
+                    <img src="${msg.file_url}" class="img-preview">
+                    ${dlButton}
+                </div>`;
         } else if (['mp4', 'webm', 'ogg'].includes(ext)) {
-            content += `<div class="media-container"><video controls class="video-preview"><source src="${msg.file_url}"></video>${dlButton}</div>`;
+            // Video: Added onclick to openLightbox
+            content += `
+                <div class="media-container" onclick="openLightbox('${msg.file_url}', 'video')">
+                    <video class="video-preview"><source src="${msg.file_url}"></video>
+                    ${dlButton}
+                </div>`;
         } else {
-            content += `<div class="file-card" onclick="forceDownload('${msg.file_url}', '${name}')">
-                <div class="file-icon"><i class="fas fa-file"></i></div>
-                <div class="file-info"><span class="file-name">${name}</span><span class="click-hint">Click to Download</span></div>
-                <div class="download-icon"><i class="fas fa-arrow-down"></i></div>
-            </div>`;
+            // Other files: Click opens in new tab (default view)
+            content += `
+                <div class="file-card" onclick="window.open('${msg.file_url}', '_blank')">
+                    <div class="file-icon"><i class="fas fa-file"></i></div>
+                    <div class="file-info"><span class="file-name">${name}</span><span class="click-hint">Click to Open</span></div>
+                    <div class="download-icon" onclick="event.stopPropagation(); forceDownload('${msg.file_url}', '${name}')"><i class="fas fa-arrow-down"></i></div>
+                </div>`;
         }
     }
 
